@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+/* ===================== WordSound — Sound Flow =====================
+   Tokens da identidade visual. Dark mode preparado (spec 52) via
+   [data-theme="dark"] e prefers-color-scheme.
+   ================================================================= */
+
+@theme {
+  --color-navy: #142a72;
+  --color-brand: #4f7cff;
+  --color-purple: #7a5cfa;
+  --color-lilac: #a9b8ff;
+  --color-success: #37c99b;
+  --color-error: #ff6b6b;
+
+  --font-sans: Inter, Manrope, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --radius-card: 1.25rem;
+  --radius-pill: 999px;
+
+  --shadow-soft: 0 1px 2px rgb(20 42 114 / 0.04), 0 8px 24px -8px rgb(20 42 114 / 0.12);
+  --shadow-lift: 0 2px 4px rgb(20 42 114 / 0.06), 0 16px 40px -12px rgb(20 42 114 / 0.22);
+}
+
+:root {
+  --bg: #f7f9ff;
+  --surface: #ffffff;
+  --surface-muted: #eef2ff;
+  --text: #172033;
+  --text-muted: #5b6780;
+  --border: #e2e8f8;
+  --ring: #4f7cff;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0b1020;
+  --surface: #141c33;
+  --surface-muted: #1b2340;
+  --text: #e8ecf8;
+  --text-muted: #97a3bf;
+  --border: #253052;
+  --ring: #7a5cfa;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1020;
+    --surface: #141c33;
+    --surface-muted: #1b2340;
+    --text: #e8ecf8;
+    --text-muted: #97a3bf;
+    --border: #253052;
+    --ring: #7a5cfa;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-border: var(--border);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* foco visivel em tudo que e navegavel por teclado (spec 58) */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@utility gradient-flow {
+  background-image: linear-gradient(90deg, var(--color-brand), var(--color-purple));
+}
+
+@utility text-gradient-flow {
+  background-image: linear-gradient(90deg, var(--color-brand), var(--color-purple));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
