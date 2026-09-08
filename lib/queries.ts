@@ -143,8 +143,23 @@ export interface LessonBlock {
   type: string;
   title: string | null;
   content: Record<string, unknown>;
+  mediaId: number | null;
   position: number;
   exercises: StudentExercise[];
+}
+
+/**
+ * Audio como o aluno recebe.
+ *
+ * Sem `transcript`: a transcricao contem literalmente a resposta dos
+ * exercicios de lacuna. Ela e liberada depois, pela action revealTranscript.
+ * A url e assinada e expira; o bucket e privado.
+ */
+export interface StudentMedia {
+  id: number;
+  title: string;
+  url: string;
+  durationSeconds: number | null;
 }
 
 export interface LessonDetail {
@@ -157,8 +172,11 @@ export interface LessonDetail {
   position: number;
   moduleTitle: string;
   blocks: LessonBlock[];
+  media: Record<number, StudentMedia>;
   totalExercises: number;
 }
+
+const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 const EXERCISE_COLUMNS =
   "id,lesson_block_id,exercise_type,instruction,question,explanation,difficulty,xp_reward,position,prompt,answer_key,media_id,exercise_options(id,text,is_correct,position)";
@@ -182,7 +200,7 @@ export async function getLessonForStudent(lessonId: number): Promise<LessonDetai
 
   const { data: blocks } = await supabase
     .from("lesson_blocks")
-    .select("id,block_type,title,content,position")
+    .select("id,block_type,title,content,media_id,position")
     .eq("lesson_id", lessonId)
     .order("position");
 
@@ -210,9 +228,19 @@ export async function getLessonForStudent(lessonId: number): Promise<LessonDetai
     type: b.block_type,
     title: b.title,
     content: (b.content ?? {}) as Record<string, unknown>,
+    mediaId: b.media_id,
     position: b.position,
     exercises: byBlock.get(b.id) ?? [],
   }));
+
+  const mediaIds = [
+    ...new Set(
+      [
+        ...mapped.map((b) => b.mediaId),
+        ...(exerciseRows ?? []).map((r) => r.media_id),
+      ].filter((id): id is number => typeof id === "number"),
+    ),
+  ];
 
   return {
     id: lesson.id,
@@ -224,8 +252,40 @@ export async function getLessonForStudent(lessonId: number): Promise<LessonDetai
     position: lesson.position,
     moduleTitle,
     blocks: mapped,
+    media: await loadStudentMedia(mediaIds),
     totalExercises: mapped.reduce((n, b) => n + b.exercises.length, 0),
   };
+}
+
+/** Busca os audios e assina uma URL temporaria para cada um. */
+async function loadStudentMedia(ids: number[]): Promise<Record<number, StudentMedia>> {
+  if (ids.length === 0) return {};
+
+  const supabase = await createSupabaseServerClient();
+  const { data: rows } = await supabase
+    .from("media")
+    .select("id,title,storage_path,duration_seconds")
+    .in("id", ids);
+  if (!rows?.length) return {};
+
+  const { data: signed } = await supabase.storage
+    .from("lesson-media")
+    .createSignedUrls(rows.map((r) => r.storage_path), SIGNED_URL_TTL_SECONDS);
+
+  const urlByPath = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
+
+  const out: Record<number, StudentMedia> = {};
+  for (const row of rows) {
+    const url = urlByPath.get(row.storage_path);
+    if (!url) continue; // sem url assinada nao adianta mandar o registro
+    out[row.id] = {
+      id: row.id,
+      title: row.title,
+      url,
+      durationSeconds: row.duration_seconds,
+    };
+  }
+  return out;
 }
 
 /** Exercicio completo, com gabarito. So para uso do corretor no servidor. */

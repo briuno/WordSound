@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { gradeAnswer } from "@/lib/exercises/registry";
 import { canAccessLesson, getServerExercise } from "@/lib/queries";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export interface AnswerFeedback {
@@ -171,6 +172,87 @@ export async function completeLesson(lessonId: number): Promise<LessonSummary | 
 
   revalidatePath("/app");
   return { accuracy, correct, incorrect, answered, xpEarned };
+}
+
+/**
+ * Libera a transcricao de um audio (spec 7: "texto oculto ou liberado depois").
+ *
+ * A transcricao nao viaja no payload da licao porque ela contem, literalmente,
+ * a resposta dos exercicios de lacuna daquele audio. So e devolvida depois que
+ * o aluno respondeu todos os exercicios ligados a esse audio.
+ */
+export async function revealTranscript(mediaId: number): Promise<{ transcript?: string; error?: string }> {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sessao expirada." };
+
+  const admin = createSupabaseAdminClient();
+  const { data: bound } = await admin.from("exercises").select("id").eq("media_id", mediaId);
+  const boundIds = (bound ?? []).map((e) => e.id);
+
+  if (boundIds.length > 0) {
+    const { data: attempts } = await supabase
+      .from("user_exercise_attempts")
+      .select("exercise_id")
+      .in("exercise_id", boundIds);
+    const answered = new Set((attempts ?? []).map((a) => a.exercise_id));
+    if (boundIds.some((id) => !answered.has(id))) {
+      return { error: "Responda os exercicios deste audio para liberar a transcricao." };
+    }
+  }
+
+  const { data: media } = await supabase.from("media").select("transcript").eq("id", mediaId).maybeSingle();
+  return { transcript: media?.transcript ?? "" };
+}
+
+export interface RetryFeedback {
+  isCorrect: boolean;
+  correctOption: string;
+  error?: string;
+}
+
+/**
+ * Corrige a pergunta de reforco gerada pelo WordSound Insight.
+ *
+ * O indice correto vive em ai_insights, sem policy de leitura para aluno, e
+ * so e comparado aqui. Nao concede XP de proposito: a pergunta de reforco e
+ * pratica formativa, nao vale pontos, para nao virar uma forma de farmar XP
+ * errando de proposito.
+ */
+export async function submitRetryAnswer(insightId: number, optionIndex: number): Promise<RetryFeedback> {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { isCorrect: false, correctOption: "", error: "Sessao expirada." };
+
+  const admin = createSupabaseAdminClient();
+  const { data: insight } = await admin
+    .from("ai_insights")
+    .select("id,user_id,retry_options,retry_correct_index")
+    .eq("id", insightId)
+    .maybeSingle();
+
+  if (!insight || insight.user_id !== user.id) {
+    return { isCorrect: false, correctOption: "", error: "Insight nao encontrado." };
+  }
+
+  const options = (insight.retry_options as string[] | null) ?? [];
+  const correctIndex = insight.retry_correct_index;
+  if (correctIndex === null || correctIndex < 0 || correctIndex >= options.length) {
+    return { isCorrect: false, correctOption: "", error: "Esta pergunta nao tem gabarito valido." };
+  }
+
+  const isCorrect = optionIndex === correctIndex;
+
+  await admin
+    .from("ai_insights")
+    .update({ retry_answered_at: new Date().toISOString(), retry_was_correct: isCorrect })
+    .eq("id", insightId);
+
+  return { isCorrect, correctOption: options[correctIndex] };
 }
 
 /** Marca a licao como iniciada, para a trilha mostrar 'em andamento'. */

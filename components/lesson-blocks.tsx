@@ -1,4 +1,6 @@
+import { ListeningBlock } from "@/components/listening-block";
 import { Card } from "@/components/ui";
+import type { StudentMedia } from "@/lib/queries";
 
 /**
  * Renderizacao dos blocos de conteudo. Cada tipo le uma forma propria do jsonb
@@ -75,10 +77,12 @@ export function LessonContentBlock({
   type,
   title,
   content,
+  media,
 }: {
   type: string;
   title: string | null;
   content: Record<string, unknown>;
+  media?: StudentMedia;
 }) {
   switch (type) {
     case "CONTENT":
@@ -88,6 +92,8 @@ export function LessonContentBlock({
       return <VocabularyBlock title={title} content={content} />;
     case "READING":
       return <ReadingBlock title={title} content={content} />;
+    case "LISTENING":
+      return <ListeningBlock title={title} content={content} media={media} />;
     default:
       return null;
   }

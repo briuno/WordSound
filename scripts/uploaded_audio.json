@@ -1,0 +1,17 @@
+[
+  {
+    "path": "audio/listening-01-marina.wav",
+    "bytes": 534444,
+    "duration": 12.12
+  },
+  {
+    "path": "audio/listening-02-paulo.wav",
+    "bytes": 499834,
+    "duration": 11.33
+  },
+  {
+    "path": "audio/listening-03-phone.wav",
+    "bytes": 486838,
+    "duration": 11.04
+  }
+]

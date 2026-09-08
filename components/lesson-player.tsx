@@ -5,6 +5,8 @@ import Link from "next/link";
 import * as React from "react";
 
 import { completeLesson, submitAnswer, type AnswerFeedback, type LessonSummary } from "@/app/(app)/actions";
+import { AIInsight } from "@/components/ai-insight";
+import { AudioPlayer } from "@/components/audio-player";
 import { ExerciseInput, hasAnswer } from "@/components/exercises";
 import { LessonContentBlock } from "@/components/lesson-blocks";
 import { Button, buttonClasses, Card, ErrorMessage, ProgressBar } from "@/components/ui";
@@ -30,10 +32,12 @@ export function LessonPlayer({ lesson }: { lesson: LessonDetail }) {
   const [feedback, setFeedback] = React.useState<AnswerFeedback | null>(null);
   const [summary, setSummary] = React.useState<LessonSummary | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [showInsight, setShowInsight] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
 
   const current = exercises[index];
   const isLast = index >= exercises.length - 1;
+  const currentMedia = current?.mediaId ? lesson.media[current.mediaId] : undefined;
 
   function finish() {
     startTransition(async () => {
@@ -63,6 +67,7 @@ export function LessonPlayer({ lesson }: { lesson: LessonDetail }) {
   function next() {
     setFeedback(null);
     setAnswer(null);
+    setShowInsight(false);
     if (isLast) {
       finish();
       return;
@@ -114,7 +119,13 @@ export function LessonPlayer({ lesson }: { lesson: LessonDetail }) {
         <BackLink />
         <h1 className="text-xl font-extrabold tracking-tight">{lesson.title}</h1>
         {contentBlocks.map((b) => (
-          <LessonContentBlock key={b.id} type={b.type} title={b.title} content={b.content} />
+          <LessonContentBlock
+            key={b.id}
+            type={b.type}
+            title={b.title}
+            content={b.content}
+            media={b.mediaId ? lesson.media[b.mediaId] : undefined}
+          />
         ))}
         <Button
           size="lg"
@@ -169,6 +180,15 @@ export function LessonPlayer({ lesson }: { lesson: LessonDetail }) {
         ) : null}
         <p className="mt-1.5 mb-5 text-lg font-semibold">{current.question}</p>
 
+        {/* exercicio de listening: o audio fica junto da pergunta */}
+        {currentMedia ? (
+          <AudioPlayer
+            src={currentMedia.url}
+            durationHint={currentMedia.durationSeconds}
+            className="mb-5 bg-surface-muted/60"
+          />
+        ) : null}
+
         <ExerciseInput
           exercise={current}
           value={answer}
@@ -179,8 +199,24 @@ export function LessonPlayer({ lesson }: { lesson: LessonDetail }) {
 
       {error ? <ErrorMessage>{error}</ErrorMessage> : null}
 
+      {showInsight && feedback && !feedback.isCorrect ? (
+        <AIInsight
+          key={current.id}
+          exerciseId={current.id}
+          studentAnswer={answer}
+          onClose={() => setShowInsight(false)}
+        />
+      ) : null}
+
       {feedback ? (
-        <Feedback feedback={feedback} onContinue={next} pending={pending} isLast={isLast} />
+        <Feedback
+          feedback={feedback}
+          onContinue={next}
+          onExplain={() => setShowInsight(true)}
+          insightOpen={showInsight}
+          pending={pending}
+          isLast={isLast}
+        />
       ) : (
         <Button
           size="lg"
@@ -227,11 +263,15 @@ function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; va
 function Feedback({
   feedback,
   onContinue,
+  onExplain,
+  insightOpen,
   pending,
   isLast,
 }: {
   feedback: AnswerFeedback;
   onContinue: () => void;
+  onExplain: () => void;
+  insightOpen: boolean;
   pending: boolean;
   isLast: boolean;
 }) {
@@ -266,14 +306,8 @@ function Feedback({
         <Button onClick={onContinue} disabled={pending} size="lg" className="flex-1">
           {pending ? "Aguarde…" : isLast ? "Ver resultado" : "Continuar"}
         </Button>
-        {!ok ? (
-          <Button
-            variant="secondary"
-            size="lg"
-            disabled
-            title="WordSound Insight chega na proxima entrega"
-            className="gap-1.5"
-          >
+        {!ok && !insightOpen ? (
+          <Button variant="secondary" size="lg" onClick={onExplain} className="gap-1.5">
             <Sparkles size={16} aria-hidden />
             Entender melhor
           </Button>
