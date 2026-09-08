@@ -11,7 +11,9 @@
     "db:migrate": "python scripts/migrate.py",
     "db:status": "python scripts/migrate.py --status",
     "typecheck": "tsc --noEmit",
-    "ai:models": "node scripts/list_google_models.mjs"
+    "ai:models": "node scripts/list_google_models.mjs",
+    "fn:deploy": "supabase functions deploy explain-answer --project-ref girfjqnbzsenucgbvojn",
+    "fn:secrets": "supabase secrets list --project-ref girfjqnbzsenucgbvojn"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
