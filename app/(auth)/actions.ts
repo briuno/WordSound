@@ -77,8 +77,18 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   if (error) return { error: humanize(error.message) };
 
   // Com confirmacao de email ligada nao vem sessao; o aluno precisa confirmar.
+  //
+  // O texto nao afirma que a conta foi criada. Para um email que ja tem
+  // cadastro confirmado o Supabase responde sucesso sem enviar nada, de
+  // proposito, para nao revelar quem ja e cadastrado. Dizer "conta criada"
+  // deixava o aluno esperando um email que nunca chegaria, entao a mensagem
+  // cobre os dois casos e aponta a saida. Mesma postura de requestPasswordReset.
   if (!data.session) {
-    return { notice: "Conta criada. Confira seu email para confirmar o cadastro." };
+    return {
+      notice:
+        "Se ainda nao houver conta com esse email, enviamos um link de confirmacao. " +
+        "Se voce ja tiver cadastro, entre pela tela de login.",
+    };
   }
   redirect("/app");
 }
