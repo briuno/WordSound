@@ -1,6 +1,6 @@
 "use client";
 
-import { House, TrendingUp, User } from "lucide-react";
+import { House, RotateCcw, TrendingUp, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 
 const ITEMS = [
   { href: "/app", label: "Home", icon: House },
+  { href: "/app/review", label: "Revisao", icon: RotateCcw },
   { href: "/app/progress", label: "Progresso", icon: TrendingUp },
   { href: "/app/profile", label: "Perfil", icon: User },
 ] as const;

@@ -1,17 +1,23 @@
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, RotateCcw } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
 import { LearningPath } from "@/components/learning-path";
 import { buttonClasses, Card, EmptyState, ProgressBar } from "@/components/ui";
 import { getLearningPath, getUserStats } from "@/lib/queries";
+import { getReviewCount } from "@/lib/review";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { greetingFor } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Home" };
 
 export default async function HomePage() {
-  const [user, path, stats] = await Promise.all([getCurrentUser(), getLearningPath(), getUserStats()]);
+  const [user, path, stats, reviewCount] = await Promise.all([
+    getCurrentUser(),
+    getLearningPath(),
+    getUserStats(),
+    getReviewCount(),
+  ]);
 
   const firstName = (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ?? "aluno";
 
@@ -83,6 +89,26 @@ export default async function HomePage() {
             Comecar
           </Link>
         </Card>
+      ) : null}
+
+      {reviewCount > 0 ? (
+        <Link
+          href="/app/review"
+          className="flex items-center gap-3 rounded-[var(--radius-card)] border border-error/35 bg-error/6 p-4 transition-shadow hover:shadow-[var(--shadow-soft)]"
+        >
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-error/15 text-error">
+            <RotateCcw size={18} aria-hidden />
+          </span>
+          <span className="min-w-0">
+            <span className="block font-bold">
+              {reviewCount} exercicio(s) para revisar
+            </span>
+            <span className="block text-sm text-text-muted">
+              Refazer o que voce errou fixa mais do que avancar.
+            </span>
+          </span>
+          <ChevronRight size={18} aria-hidden className="ml-auto shrink-0 text-text-muted" />
+        </Link>
       ) : null}
 
       <section aria-labelledby="trilha">
