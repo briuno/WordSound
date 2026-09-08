@@ -11,7 +11,7 @@ import {
 } from "./types";
 
 /** Sobrescrevivel por GOOGLE_MODEL, porque a lista de modelos muda com frequencia. */
-export const DEFAULT_GOOGLE_MODEL = "gemini-2.5-flash";
+export const DEFAULT_GOOGLE_MODEL = "gemini-3.5-flash-lite";
 
 const SYSTEM = `Voce e o WordSound Insight, um tutor de ingles dentro de uma plataforma de estudos.
 O aluno errou um exercicio e quer entender o motivo.

@@ -16,7 +16,7 @@
  */
 import { GoogleGenAI, Type } from "npm:@google/genai@2.21.0";
 
-const MODEL = Deno.env.get("GOOGLE_MODEL") ?? "gemini-2.5-flash";
+const MODEL = Deno.env.get("GOOGLE_MODEL") ?? "gemini-3.5-flash-lite";
 const API_KEY = Deno.env.get("GOOGLE_API_KEY");
 
 const SYSTEM = `Voce e o WordSound Insight, um tutor de ingles dentro de uma plataforma de estudos.
@@ -49,6 +49,9 @@ const RESPONSE_SCHEMA = {
 };
 
 interface RequestBody {
+  /** Override opcional do modelo. So o servidor chama esta funcao, entao e
+   *  seguro; serve para comparar modelos sem um redeploy por tentativa. */
+  model?: string;
   question: string;
   instruction: string | null;
   studentAnswer: string;
@@ -65,6 +68,33 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+/**
+ * O Gemini devolve 503 UNAVAILABLE quando o modelo esta sob demanda alta, e
+ * isso passa em poucos segundos. Sem esta repeticao, um blip momentaneo do
+ * fornecedor viraria erro na tela do aluno: foi exatamente o que aconteceu no
+ * primeiro teste desta funcao, e a tentativa seguinte funcionou.
+ */
+async function withRetry<T>(operation: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+      const transient =
+        message.includes("503") ||
+        message.includes("unavailable") ||
+        message.includes("high demand") ||
+        message.includes("429") ||
+        message.includes("overloaded");
+      if (!transient || attempt === attempts) break;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+    }
+  }
+  throw lastError;
+}
+
 /** Le o claim `role` do JWT sem verificar assinatura. */
 function roleFromJwt(token: string): string | null {
   try {
@@ -79,8 +109,6 @@ function roleFromJwt(token: string): string | null {
 }
 
 Deno.serve(async (request: Request) => {
-  if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
-
   // O Supabase ja valida a assinatura do JWT antes de chegar aqui. O que falta
   // checar e QUAL papel esta chamando: so o servidor do app, nunca um aluno.
   const auth = request.headers.get("Authorization") ?? "";
@@ -92,6 +120,32 @@ Deno.serve(async (request: Request) => {
   if (!API_KEY) {
     return json({ error: "GOOGLE_API_KEY nao cadastrada nos secrets da funcao." }, 503);
   }
+
+  // GET lista os modelos que esta chave alcanca. Diagnostico: a chave vive
+  // so aqui, entao esta e a unica forma de descobrir o que esta disponivel
+  // sem tirar o segredo de dentro da funcao.
+  if (request.method === "GET") {
+    try {
+      const ai = new GoogleGenAI({ apiKey: API_KEY });
+      const page = await ai.models.list();
+      const models: { id: string; input?: number; output?: number }[] = [];
+      for await (const model of page) {
+        const actions = model.supportedActions ?? [];
+        if (actions.length && !actions.includes("generateContent")) continue;
+        models.push({
+          id: (model.name ?? "").replace(/^models\//, ""),
+          input: model.inputTokenLimit,
+          output: model.outputTokenLimit,
+        });
+      }
+      return json({ current: MODEL, models });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return json({ error: "Falha ao listar modelos.", detail: message.slice(0, 400) }, 502);
+    }
+  }
+
+  if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   let body: RequestBody;
   try {
@@ -117,15 +171,18 @@ Deno.serve(async (request: Request) => {
 
   try {
     const ai = new GoogleGenAI({ apiKey: API_KEY });
-    const response = await ai.models.generateContent({
-      model: MODEL,
-      contents: prompt,
-      config: {
-        systemInstruction: SYSTEM,
-        responseMimeType: "application/json",
-        responseSchema: RESPONSE_SCHEMA,
-      },
-    });
+    const chosenModel = body.model?.trim() || MODEL;
+    const response = await withRetry(() =>
+      ai.models.generateContent({
+        model: chosenModel,
+        contents: prompt,
+        config: {
+          systemInstruction: SYSTEM,
+          responseMimeType: "application/json",
+          responseSchema: RESPONSE_SCHEMA,
+        },
+      })
+    );
 
     const text = response.text;
     if (!text) {
@@ -133,20 +190,29 @@ Deno.serve(async (request: Request) => {
     }
     // devolve cru: quem valida o contrato e o servidor do app, com o mesmo zod
     // que a implementacao da Anthropic usa
-    return json({ raw: text, model: MODEL });
+    return json({ raw: text, model: chosenModel });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("explain-answer:", message);
     const lower = message.toLowerCase();
+
+    // `detail` so trafega servidor a servidor: a funcao recusa qualquer papel
+    // que nao seja service_role, entao isso nunca chega ao navegador do aluno.
+    // Sem ele, diagnosticar uma falha aqui exige redeploy so para ver o motivo.
+    const detail = message.slice(0, 400);
+
     if (lower.includes("api key") || lower.includes("401") || lower.includes("403")) {
-      return json({ error: "Credencial do Google invalida ou sem permissao." }, 502);
+      return json({ error: "Credencial do Google invalida ou sem permissao.", detail }, 502);
     }
     if (lower.includes("not found") || lower.includes("404")) {
-      return json({ error: `Modelo "${MODEL}" indisponivel para esta chave.` }, 502);
+      return json({ error: `Modelo "${MODEL}" indisponivel para esta chave.`, detail }, 502);
+    }
+    if (lower.includes("503") || lower.includes("unavailable") || lower.includes("high demand")) {
+      return json({ error: "O modelo esta sobrecarregado. Tente de novo em instantes.", detail }, 502);
     }
     if (lower.includes("quota") || lower.includes("429")) {
-      return json({ error: "Cota do Google esgotada. Tente em instantes." }, 502);
+      return json({ error: "Cota do Google esgotada. Tente em instantes.", detail }, 502);
     }
-    return json({ error: "Nao consegui gerar a explicacao agora." }, 502);
+    return json({ error: "Nao consegui gerar a explicacao agora.", detail }, 502);
   }
 });
