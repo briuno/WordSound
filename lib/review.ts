@@ -107,7 +107,7 @@ export async function getReviewMedia(items: ReviewItem[]): Promise<Record<number
   const supabase = await createSupabaseServerClient();
   const { data: rows } = await supabase
     .from("media")
-    .select("id,title,storage_path,duration_seconds")
+    .select("id,kind,title,storage_path,duration_seconds")
     .in("id", ids);
   if (!rows?.length) return {};
 
@@ -120,7 +120,13 @@ export async function getReviewMedia(items: ReviewItem[]): Promise<Record<number
   for (const row of rows) {
     const url = urlByPath.get(row.storage_path);
     if (!url) continue;
-    out[row.id] = { id: row.id, title: row.title, url, durationSeconds: row.duration_seconds };
+    out[row.id] = {
+      id: row.id,
+      kind: row.kind === "image" ? "image" : "audio",
+      title: row.title,
+      url,
+      durationSeconds: row.duration_seconds,
+    };
   }
   return out;
 }

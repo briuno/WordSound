@@ -102,3 +102,52 @@ npm run icons
 
 Regenera tudo a partir do traco da marca com o sharp. Rode quando a identidade
 mudar.
+
+## Conteudo dos blocos
+
+Um bloco de **Conteudo** ou **Gramatica** nao e so texto corrido. O jsonb de
+`lesson_blocks.content` aceita, em qualquer combinacao:
+
+| Campo | O que e | Onde aparece |
+| --- | --- | --- |
+| `rule` | a regra em uma frase | primeiro, em destaque |
+| `tables` | o paradigma (verbo, plural, dezenas) | tabela com scroll proprio |
+| `contrast` | erro tipico de quem fala portugues x forma certa | lista ✗ / ✓ |
+| `keyPoints` | o que levar para o exercicio | caixa "Pontos-chave" |
+| `paragraphs` | o texto corrido de sempre | depois das tabelas |
+| `tip` | lembrete final | por ultimo |
+
+A ordem na tela e sempre essa, para o aluno aprender onde procurar cada coisa.
+Nenhum campo e obrigatorio: bloco antigo, so com `paragraphs`, continua valendo.
+
+`rule`, `tables` e `keyPoints` sao tambem o que o **Ver a regra** mostra durante
+os exercicios ([`components/lesson-blocks.tsx`](components/lesson-blocks.tsx),
+`BlockRecap`). Quem responde quer a tabela, nao o texto — entao o que se
+consulta no meio da pratica precisa morar nesses tres campos.
+
+No painel nada disso e JSON. As tabelas se escrevem assim, uma linha em branco
+entre elas:
+
+```
+= Afirmativo
+Pessoa | Verbo | Exemplo
+I | am | I am a student.
+he / she / it | is | She is a nurse.
+```
+
+E os erros comuns, um por linha: `errado | certo | por que`.
+
+### Imagem no bloco
+
+Blocos de conteudo, vocabulario e reading aceitam uma imagem, pela mesma coluna
+`lesson_blocks.media_id` que o listening usa para o audio. Suba em **Midia** e
+escolha no editor do bloco, com texto alternativo e legenda.
+
+Em lote:
+
+```bash
+python scripts/upload_course_images.py <pasta> "Unit 1"
+```
+
+O nome do arquivo vira o titulo no painel, entao vale nomear pensando na busca:
+`u1-l04-profissoes.png` acha melhor que `IMG_0042.png`.

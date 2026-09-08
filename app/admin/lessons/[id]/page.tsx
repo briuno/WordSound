@@ -49,18 +49,21 @@ export default async function AdminLessonPage({ params }: Params) {
     (Array.isArray(lesson.modules) ? lesson.modules[0]?.title : (lesson.modules as { title: string } | null)?.title) ??
     "";
 
-  const [{ data: blocks }, { data: audios }] = await Promise.all([
+  const [{ data: blocks }, { data: mediaRows }] = await Promise.all([
     supabase
       .from("lesson_blocks")
       .select("id,block_type,title,content,media_id,position")
       .eq("lesson_id", lessonId)
       .order("position")
       .order("id"),
-    supabase.from("media").select("id,title").eq("kind", "audio").order("title"),
+    supabase.from("media").select("id,title,kind").order("title"),
   ]);
 
   const blockList = blocks ?? [];
-  const audioList = audios ?? [];
+  // a mesma coluna media_id serve audio e imagem, entao cada bloco so ve a
+  // lista do tipo que ele aceita
+  const audioList = (mediaRows ?? []).filter((m) => m.kind === "audio");
+  const imageList = (mediaRows ?? []).filter((m) => m.kind === "image");
 
   // O admin le exercicios pela policy de admin, entao o cliente do usuario basta
   const { data: exercises } = await supabase
@@ -246,6 +249,7 @@ export default async function AdminLessonPage({ params }: Params) {
                       content={(block.content ?? {}) as Record<string, unknown>}
                       mediaId={block.media_id}
                       audios={audioList}
+                      images={imageList}
                     />
                   )}
                 </div>
