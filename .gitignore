@@ -67,3 +67,6 @@ supabase/.branches/
 
 .vercel
 .env*
+
+# material do curso: 100+ MB de audio e digitalizacao, vive no bucket
+/course-material
