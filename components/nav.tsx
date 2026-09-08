@@ -50,7 +50,7 @@ export function MobileNav() {
   return (
     <nav
       aria-label="Navegacao principal"
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--border)] bg-surface/95 backdrop-blur md:hidden"
+      className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-[var(--border)] bg-surface/95 backdrop-blur md:hidden"
     >
       <ul className="flex">
         {ITEMS.map(({ href, label, icon: Icon }) => {

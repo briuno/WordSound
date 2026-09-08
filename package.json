@@ -12,6 +12,7 @@
     "db:status": "python scripts/migrate.py --status",
     "typecheck": "tsc --noEmit",
     "ai:models": "node scripts/list_google_models.mjs",
+    "icons": "node scripts/generate-icons.mjs",
     "fn:deploy": "supabase functions deploy explain-answer --project-ref girfjqnbzsenucgbvojn",
     "fn:secrets": "supabase secrets list --project-ref girfjqnbzsenucgbvojn"
   },

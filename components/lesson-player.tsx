@@ -7,6 +7,7 @@ import * as React from "react";
 import { completeLesson, submitAnswer, type AnswerFeedback, type LessonSummary } from "@/app/(app)/actions";
 import { AIInsight } from "@/components/ai-insight";
 import { AudioPlayer } from "@/components/audio-player";
+import { DownloadLessonAudio } from "@/components/download-lesson-audio";
 import { ExerciseInput, hasAnswer } from "@/components/exercises";
 import { LessonContentBlock } from "@/components/lesson-blocks";
 import { Button, buttonClasses, Card, ErrorMessage, ProgressBar } from "@/components/ui";
@@ -25,6 +26,7 @@ export function LessonPlayer({ lesson }: { lesson: LessonDetail }) {
     () => lesson.blocks.flatMap((b) => b.exercises),
     [lesson.blocks],
   );
+  const medias = React.useMemo(() => Object.values(lesson.media), [lesson.media]);
 
   const [phase, setPhase] = React.useState<Phase>("intro");
   const [index, setIndex] = React.useState(0);
@@ -107,6 +109,14 @@ export function LessonPlayer({ lesson }: { lesson: LessonDetail }) {
           <Button size="lg" className="mt-6 w-full" onClick={() => setPhase(contentBlocks.length ? "study" : "practice")}>
             Comecar
           </Button>
+
+          {medias.length > 0 ? (
+            <DownloadLessonAudio
+              lesson={{ id: lesson.id, title: lesson.title }}
+              medias={medias}
+              className="mt-4"
+            />
+          ) : null}
         </Card>
       </div>
     );

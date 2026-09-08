@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { AdminNav } from "@/components/admin-nav";
 import { SoundWave } from "@/components/brand";
+import { OfflineBanner } from "@/components/offline-banner";
 import { requireAdmin } from "@/lib/admin";
 
 export const metadata: Metadata = {
@@ -15,7 +16,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-bg/85 backdrop-blur">
+      <header className="pt-safe sticky top-0 z-20 border-b border-[var(--border)] bg-bg/85 backdrop-blur">
+        <OfflineBanner />
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-5 py-3">
           <Link href="/admin" className="inline-flex items-center gap-2.5 rounded-xl">
             <SoundWave className="h-7 w-auto" />

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { signOut } from "@/app/(auth)/actions";
+import { OfflineAudioList } from "@/components/offline-audio-list";
 import { Button, Card } from "@/components/ui";
 import { getUserStats } from "@/lib/queries";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -80,6 +81,13 @@ export default async function ProfilePage() {
             );
           })}
         </ul>
+      </section>
+
+      <section aria-labelledby="audios-offline">
+        <h2 id="audios-offline" className="mb-3 text-sm font-bold uppercase tracking-wide text-text-muted">
+          Audios baixados
+        </h2>
+        <OfflineAudioList emptyHint="Nenhum audio baixado. Dentro de uma licao com audio, use 'Baixar o audio' para ouvir sem internet." />
       </section>
 
       <form action={signOut}>

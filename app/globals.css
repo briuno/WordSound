@@ -97,3 +97,27 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ===================== PWA =====================
+   Ajustes que so valem para o app instalado. Em aba de navegador as safe areas
+   valem 0, entao os paddings abaixo nao mudam nada.
+   =============================================== */
+
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@media (display-mode: standalone) {
+  html {
+    /* sem o efeito de "puxar" a pagina, que entrega que e um navegador */
+    overscroll-behavior-y: none;
+  }
+}
+
+:where(a, button, [role="button"]) {
+  -webkit-tap-highlight-color: transparent;
+}
