@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, Clock, Sparkles, Target, Trophy, X } from "lucide-react";
+import { ArrowLeft, BookOpen, Check, ChevronDown, Clock, Sparkles, Target, Trophy, X } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -9,24 +9,49 @@ import { AIInsight } from "@/components/ai-insight";
 import { AudioPlayer } from "@/components/audio-player";
 import { DownloadLessonAudio } from "@/components/download-lesson-audio";
 import { ExerciseInput, hasAnswer } from "@/components/exercises";
-import { LessonContentBlock } from "@/components/lesson-blocks";
+import { BlockRecap, hasRecap, LessonContentBlock } from "@/components/lesson-blocks";
+import { TranscriptReveal } from "@/components/listening-block";
 import { Button, buttonClasses, Card, ErrorMessage, ProgressBar } from "@/components/ui";
-import type { LessonDetail } from "@/lib/queries";
-import type { StudentExercise } from "@/lib/exercises/types";
+import { buildLessonSteps, type LessonStep } from "@/lib/lesson-flow";
+import type { LessonBlock, LessonDetail } from "@/lib/queries";
 import { cn, formatMinutes } from "@/lib/utils";
 
-type Phase = "intro" | "study" | "practice" | "result";
+type Phase = "intro" | "run" | "result";
 
+/**
+ * A licao acontece uma tela por vez.
+ *
+ * Antes eram duas telonas: todo o conteudo empilhado em uma, todos os
+ * exercicios na outra. Numa licao de listening isso significava tres players
+ * de audio juntos, sem pergunta nenhuma por perto, e depois as perguntas
+ * repetindo os mesmos audios fora de contexto.
+ *
+ * Agora buildLessonSteps devolve a licao ja costurada — bloco, perguntas do
+ * bloco, proximo bloco — e este componente so caminha por essa fila.
+ */
 export function LessonPlayer({ lesson }: { lesson: LessonDetail }) {
-  const contentBlocks = React.useMemo(
-    () => lesson.blocks.filter((b) => b.type !== "EXERCISE" && b.type !== "AI_REVIEW"),
-    [lesson.blocks],
+  const steps = React.useMemo(() => buildLessonSteps(lesson), [lesson]);
+
+  const studyBlocks = React.useMemo(
+    () => steps.flatMap((s) => (s.kind === "study" ? [s.block] : [])),
+    [steps],
   );
-  const exercises = React.useMemo<StudentExercise[]>(
-    () => lesson.blocks.flatMap((b) => b.exercises),
-    [lesson.blocks],
+  const exerciseCount = React.useMemo(
+    () => steps.filter((s) => s.kind === "exercise").length,
+    [steps],
   );
-  const medias = React.useMemo(() => Object.values(lesson.media), [lesson.media]);
+  // numero de cada pergunta dentro da licao, para o aluno se localizar
+  const exerciseNumbers = React.useMemo(() => {
+    let n = 0;
+    return steps.map((s) => (s.kind === "exercise" ? ++n : 0));
+  }, [steps]);
+
+  // so audio: imagem de bloco tambem vive em lesson.media, e nao tem o que
+  // baixar para ouvir offline
+  const medias = React.useMemo(
+    () => Object.values(lesson.media).filter((m) => m.kind === "audio"),
+    [lesson.media],
+  );
 
   const [phase, setPhase] = React.useState<Phase>("intro");
   const [index, setIndex] = React.useState(0);
@@ -37,9 +62,22 @@ export function LessonPlayer({ lesson }: { lesson: LessonDetail }) {
   const [showInsight, setShowInsight] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
 
-  const current = exercises[index];
-  const isLast = index >= exercises.length - 1;
-  const currentMedia = current?.mediaId ? lesson.media[current.mediaId] : undefined;
+  // cada etapa e uma tela nova: comecar no meio dela, na altura em que o botao
+  // anterior estava, esconde o titulo do que acabou de abrir
+  React.useEffect(() => {
+    if (phase === "intro") return;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [index, phase]);
+
+  const step: LessonStep | undefined = steps[index];
+  const isLastStep = index >= steps.length - 1;
+
+  // a regra so serve de consulta depois de lida: mostrar o que ainda vem seria
+  // entregar a resposta antes da pergunta
+  const recapBlocks = React.useMemo<LessonBlock[]>(
+    () => steps.slice(0, index).flatMap((s) => (s.kind === "study" && hasRecap(s.block.content) ? [s.block] : [])),
+    [steps, index],
+  );
 
   function finish() {
     startTransition(async () => {
@@ -53,28 +91,30 @@ export function LessonPlayer({ lesson }: { lesson: LessonDetail }) {
     });
   }
 
-  function check() {
-    if (!current) return;
+  function advance() {
+    setFeedback(null);
+    setAnswer(null);
+    setShowInsight(false);
     setError(null);
+    if (isLastStep) {
+      finish();
+      return;
+    }
+    setIndex((i) => i + 1);
+  }
+
+  function check() {
+    if (step?.kind !== "exercise") return;
+    setError(null);
+    const exerciseId = step.exercise.id;
     startTransition(async () => {
-      const result = await submitAnswer(lesson.id, current.id, answer);
+      const result = await submitAnswer(lesson.id, exerciseId, answer);
       if (result.error) {
         setError(result.error);
         return;
       }
       setFeedback(result);
     });
-  }
-
-  function next() {
-    setFeedback(null);
-    setAnswer(null);
-    setShowInsight(false);
-    if (isLast) {
-      finish();
-      return;
-    }
-    setIndex((i) => i + 1);
   }
 
   /* ------------------------------------------------------------- intro */
@@ -89,14 +129,14 @@ export function LessonPlayer({ lesson }: { lesson: LessonDetail }) {
 
           <dl className="mt-5 grid grid-cols-2 gap-3">
             <Stat icon={<Clock size={16} aria-hidden />} label="Tempo estimado" value={formatMinutes(lesson.estimatedMinutes)} />
-            <Stat icon={<Target size={16} aria-hidden />} label="Exercicios" value={String(exercises.length)} />
+            <Stat icon={<Target size={16} aria-hidden />} label="Exercicios" value={String(exerciseCount)} />
           </dl>
 
-          {contentBlocks.length > 0 ? (
+          {studyBlocks.length > 0 ? (
             <div className="mt-5">
               <p className="mb-2 text-xs font-bold uppercase tracking-wide text-text-muted">O que voce vai estudar</p>
               <ul className="space-y-1.5 text-sm text-text">
-                {contentBlocks.map((b) => (
+                {studyBlocks.map((b) => (
                   <li key={b.id} className="flex items-center gap-2">
                     <span className="size-1.5 shrink-0 rounded-full bg-brand" aria-hidden />
                     {b.title ?? b.type}
@@ -106,7 +146,7 @@ export function LessonPlayer({ lesson }: { lesson: LessonDetail }) {
             </div>
           ) : null}
 
-          <Button size="lg" className="mt-6 w-full" onClick={() => setPhase(contentBlocks.length ? "study" : "practice")}>
+          <Button size="lg" className="mt-6 w-full" onClick={() => setPhase("run")}>
             Comecar
           </Button>
 
@@ -122,85 +162,104 @@ export function LessonPlayer({ lesson }: { lesson: LessonDetail }) {
     );
   }
 
-  /* ------------------------------------------------------------- study */
-  if (phase === "study") {
-    return (
-      <div className="mx-auto max-w-2xl space-y-4">
-        <BackLink />
-        <h1 className="text-xl font-extrabold tracking-tight">{lesson.title}</h1>
-        {contentBlocks.map((b) => (
-          <LessonContentBlock
-            key={b.id}
-            type={b.type}
-            title={b.title}
-            content={b.content}
-            media={b.mediaId ? lesson.media[b.mediaId] : undefined}
-          />
-        ))}
-        <Button
-          size="lg"
-          className="w-full"
-          onClick={() => (exercises.length > 0 ? setPhase("practice") : finish())}
-          disabled={pending}
-        >
-          {exercises.length > 0 ? "Ir para os exercicios" : "Concluir licao"}
-        </Button>
-      </div>
-    );
-  }
-
   /* ------------------------------------------------------------ result */
   if (phase === "result" && summary) {
     return <LessonResult lesson={lesson} summary={summary} />;
   }
 
-  /* ---------------------------------------------------------- practice */
-  if (!current) {
+  /* ------------------------------------------------------- licao vazia */
+  if (!step) {
     return (
       <div className="mx-auto max-w-2xl space-y-4">
         <Card>
-          <p className="font-semibold">Esta licao ainda nao tem exercicios cadastrados.</p>
+          <p className="font-semibold">Esta licao ainda nao tem conteudo cadastrado.</p>
           <p className="mt-1 text-sm text-text-muted">
-            Um administrador pode adiciona-los pelo painel. Voce ja pode concluir.
+            Um administrador pode adiciona-lo pelo painel. Voce ja pode concluir.
           </p>
           <Button className="mt-5 w-full" onClick={finish} disabled={pending}>
-            Concluir licao
+            {pending ? "Aguarde…" : "Concluir licao"}
           </Button>
         </Card>
+        {error ? <ErrorMessage>{error}</ErrorMessage> : null}
       </div>
     );
   }
 
+  const header = (
+    <div className="flex items-center gap-3">
+      <BackLink compact />
+      <ProgressBar
+        value={((index + (feedback ? 1 : 0)) / steps.length) * 100}
+        label={
+          step.kind === "study"
+            ? (step.block.title ?? "Conteudo")
+            : `Exercicio ${exerciseNumbers[index]} de ${exerciseCount}`
+        }
+      />
+      <span className="shrink-0 text-sm font-bold tabular-nums text-text-muted">
+        {index + 1}/{steps.length}
+      </span>
+    </div>
+  );
+
+  /* ------------------------------------------------------------ estudo */
+  if (step.kind === "study") {
+    const label = isLastStep
+      ? "Concluir licao"
+      : step.questionCount === 0
+        ? "Continuar"
+        : step.questionCount === 1
+          ? "Ir para a pergunta"
+          : "Ir para as perguntas";
+
+    return (
+      <div className="mx-auto max-w-2xl space-y-5">
+        {header}
+
+        <LessonContentBlock
+          key={step.key}
+          type={step.block.type}
+          title={step.block.title}
+          content={step.block.content}
+          media={step.media}
+          questionCount={step.questionCount}
+        />
+
+        {error ? <ErrorMessage>{error}</ErrorMessage> : null}
+
+        <Button size="lg" className="w-full" onClick={advance} disabled={pending}>
+          {pending ? "Aguarde…" : label}
+        </Button>
+      </div>
+    );
+  }
+
+  /* ---------------------------------------------------------- exercicio */
+  const exercise = step.exercise;
+
   return (
     <div className="mx-auto max-w-2xl space-y-5">
-      <div className="flex items-center gap-3">
-        <BackLink compact />
-        <ProgressBar
-          value={((index + (feedback ? 1 : 0)) / exercises.length) * 100}
-          label={`Exercicio ${index + 1} de ${exercises.length}`}
-        />
-        <span className="shrink-0 text-sm font-bold tabular-nums text-text-muted">
-          {index + 1}/{exercises.length}
-        </span>
-      </div>
+      {header}
+
+      <RuleSheet blocks={recapBlocks} />
 
       <Card>
-        {current.instruction ? (
-          <p className="text-xs font-bold uppercase tracking-wide text-brand">{current.instruction}</p>
+        {exercise.instruction ? (
+          <p className="text-xs font-bold uppercase tracking-wide text-brand">{exercise.instruction}</p>
         ) : null}
-        <p className="mt-1.5 mb-5 text-lg font-semibold">{current.question}</p>
+        <p className="mt-1.5 mb-5 text-lg font-semibold">{exercise.question}</p>
 
-        {/* exercicio de listening: o audio fica junto da pergunta */}
-        {currentMedia ? (
+        {/* exercicio de listening: o audio da faixa fica junto da pergunta */}
+        {step.media?.kind === "audio" ? (
           <AudioPlayer
-            src={currentMedia.url}
-            durationHint={currentMedia.durationSeconds}
+            src={step.media.url}
+            durationHint={step.media.durationSeconds}
             className="mb-5 bg-surface-muted/60"
           />
         ) : null}
 
         <ExerciseInput
-          exercise={current}
+          exercise={exercise}
           value={answer}
           onChange={setAnswer}
           disabled={pending || feedback !== null}
@@ -211,28 +270,38 @@ export function LessonPlayer({ lesson }: { lesson: LessonDetail }) {
 
       {showInsight && feedback && !feedback.isCorrect ? (
         <AIInsight
-          key={current.id}
-          exerciseId={current.id}
+          key={exercise.id}
+          exerciseId={exercise.id}
           studentAnswer={answer}
           onClose={() => setShowInsight(false)}
         />
       ) : null}
 
+      {/* fim da faixa: agora a transcricao ja nao entrega resposta nenhuma */}
+      {feedback && step.endsTrack && step.media ? (
+        <Card className="p-5">
+          <p className="mb-3 text-xs font-bold uppercase tracking-wide text-text-muted">
+            {step.media.title}
+          </p>
+          <TranscriptReveal mediaId={step.media.id} />
+        </Card>
+      ) : null}
+
       {feedback ? (
         <Feedback
           feedback={feedback}
-          onContinue={next}
+          onContinue={advance}
           onExplain={() => setShowInsight(true)}
           insightOpen={showInsight}
           pending={pending}
-          isLast={isLast}
+          isLast={isLastStep}
         />
       ) : (
         <Button
           size="lg"
           className="w-full"
           onClick={check}
-          disabled={pending || !hasAnswer(current.type, answer)}
+          disabled={pending || !hasAnswer(exercise.type, answer)}
         >
           {pending ? "Verificando…" : "Verificar"}
         </Button>
@@ -255,6 +324,32 @@ function BackLink({ compact = false }: { compact?: boolean }) {
       <ArrowLeft size={16} aria-hidden />
       {compact ? <span className="sr-only">Voltar para a trilha</span> : "Voltar para a trilha"}
     </Link>
+  );
+}
+
+/**
+ * Consulta rapida durante a pratica.
+ *
+ * A explicacao sai da tela quando o exercicio comeca, e o aluno acabava
+ * respondendo de memoria a tabela que leu dois minutos antes. Fechado por
+ * padrao: quem nao precisa nao perde a tela, e quem precisa nao perde a
+ * resposta ja digitada, porque <details> nao remonta o formulario.
+ */
+function RuleSheet({ blocks }: { blocks: LessonBlock[] }) {
+  if (blocks.length === 0) return null;
+  return (
+    <details className="group rounded-[var(--radius-card)] border border-[var(--border)] bg-surface">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-5 py-3.5 text-sm font-semibold text-text-muted hover:text-text [&::-webkit-details-marker]:hidden">
+        <BookOpen size={16} aria-hidden />
+        Ver a regra
+        <ChevronDown size={16} className="ml-auto transition-transform group-open:rotate-180" aria-hidden />
+      </summary>
+      <div className="space-y-5 border-t border-[var(--border)] px-5 py-4">
+        {blocks.map((block) => (
+          <BlockRecap key={block.id} title={block.title} content={block.content} />
+        ))}
+      </div>
+    </details>
   );
 }
 

@@ -55,6 +55,23 @@ async function computePeaks(url: string, signal: AbortSignal): Promise<number[] 
   }
 }
 
+/**
+ * Picos ja calculados, por arquivo.
+ *
+ * A mesma faixa reaparece em cada pergunta que fala dela. Sem isto, trocar de
+ * tela baixava o audio inteiro de novo so para redesenhar a mesma waveform, e
+ * a barra piscava no padrao neutro no meio do caminho.
+ *
+ * A chave ignora a query porque a URL do Supabase e assinada e troca de token,
+ * o mesmo corte que o service worker faz para achar o audio no cache.
+ */
+const peaksCache = new Map<string, number[]>();
+
+function peaksKey(url: string): string {
+  const cut = url.indexOf("?");
+  return cut === -1 ? url : url.slice(0, cut);
+}
+
 export function AudioPlayer({
   src,
   title,
@@ -72,11 +89,21 @@ export function AudioPlayer({
   const [duration, setDuration] = React.useState(durationHint ?? 0);
   const [rate, setRate] = React.useState<number>(1);
   const [volume, setVolume] = React.useState(1);
-  const [peaks, setPeaks] = React.useState<number[] | null>(null);
+  // Quem manda na tela e o cache, que sobrevive a troca de etapa. O estado so
+  // existe para pedir o rerender quando a decodificacao termina.
+  const [decoded, setDecoded] = React.useState<{ key: string; peaks: number[] } | null>(null);
+  const key = peaksKey(src);
+  const peaks = peaksCache.get(key) ?? (decoded?.key === key ? decoded.peaks : null);
 
   React.useEffect(() => {
+    const key = peaksKey(src);
+    if (peaksCache.has(key)) return;
     const controller = new AbortController();
-    computePeaks(src, controller.signal).then(setPeaks);
+    computePeaks(src, controller.signal).then((result) => {
+      if (!result || controller.signal.aborted) return;
+      peaksCache.set(key, result);
+      setDecoded({ key, peaks: result });
+    });
     return () => controller.abort();
   }, [src]);
 

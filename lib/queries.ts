@@ -244,14 +244,18 @@ export interface LessonBlock {
 }
 
 /**
- * Audio como o aluno recebe.
+ * Midia como o aluno recebe.
  *
  * Sem `transcript`: a transcricao contem literalmente a resposta dos
  * exercicios de lacuna. Ela e liberada depois, pela action revealTranscript.
  * A url e assinada e expira; o bucket e privado.
+ *
+ * `kind` vem junto porque audio e imagem seguem caminhos diferentes na tela:
+ * audio vira player e pode ser baixado para uso offline, imagem vira figura.
  */
 export interface StudentMedia {
   id: number;
+  kind: "audio" | "image";
   title: string;
   url: string;
   durationSeconds: number | null;
@@ -352,14 +356,14 @@ export async function getLessonForStudent(lessonId: number): Promise<LessonDetai
   };
 }
 
-/** Busca os audios e assina uma URL temporaria para cada um. */
+/** Busca as midias e assina uma URL temporaria para cada uma. */
 async function loadStudentMedia(ids: number[]): Promise<Record<number, StudentMedia>> {
   if (ids.length === 0) return {};
 
   const supabase = await createSupabaseServerClient();
   const { data: rows } = await supabase
     .from("media")
-    .select("id,title,storage_path,duration_seconds")
+    .select("id,kind,title,storage_path,duration_seconds")
     .in("id", ids);
   if (!rows?.length) return {};
 
@@ -375,6 +379,7 @@ async function loadStudentMedia(ids: number[]): Promise<Record<number, StudentMe
     if (!url) continue; // sem url assinada nao adianta mandar o registro
     out[row.id] = {
       id: row.id,
+      kind: row.kind === "image" ? "image" : "audio",
       title: row.title,
       url,
       durationSeconds: row.duration_seconds,
