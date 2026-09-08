@@ -366,6 +366,84 @@ export async function deleteExercise(exerciseId: number, lessonId: number): Prom
   return ok;
 }
 
+/* ============================== midia ============================== */
+
+/** Limite de upload, configuravel por ambiente (spec 49). */
+export async function getMediaLimits(): Promise<{ maxBytes: number; accept: string[] }> {
+  const configured = Number(process.env.MEDIA_MAX_MB ?? "");
+  const maxMb = Number.isFinite(configured) && configured > 0 ? configured : 25;
+  return {
+    maxBytes: maxMb * 1024 * 1024,
+    accept: ["audio/mpeg", "audio/mp4", "audio/x-m4a", "audio/wav", "image/png", "image/jpeg", "image/webp"],
+  };
+}
+
+/**
+ * Registra na tabela um arquivo que ja foi enviado ao Storage.
+ *
+ * O upload em si acontece no navegador, direto para o Supabase, para o arquivo
+ * nao trafegar duas vezes nem esbarrar no limite de corpo de uma server action.
+ * A policy de insert do bucket exige admin, entao o caminho continua protegido.
+ */
+export async function registerMedia(values: {
+  kind: "audio" | "image";
+  title: string;
+  storagePath: string;
+  mimeType: string;
+  sizeBytes: number;
+  durationSeconds: number | null;
+  transcript: string;
+}): Promise<ActionResult> {
+  const { user } = await requireAdmin();
+  const title = values.title.trim();
+  if (title.length < 2) return fail("Informe um titulo para o arquivo.");
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("media").insert({
+    kind: values.kind,
+    title,
+    storage_path: values.storagePath,
+    mime_type: values.mimeType,
+    size_bytes: values.sizeBytes,
+    duration_seconds: values.durationSeconds,
+    transcript: values.transcript.trim() || null,
+    created_by: user.id,
+  });
+  if (error) return fail(error.message);
+  refreshAll("/admin/media");
+  return ok;
+}
+
+export async function updateMedia(mediaId: number, formData: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const title = String(formData.get("title") ?? "").trim();
+  if (title.length < 2) return fail("Informe um titulo.");
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("media")
+    .update({ title, transcript: String(formData.get("transcript") ?? "").trim() || null })
+    .eq("id", mediaId);
+  if (error) return fail(error.message);
+  refreshAll("/admin/media");
+  return ok;
+}
+
+export async function deleteMedia(mediaId: number, storagePath: string): Promise<ActionResult> {
+  await requireAdmin();
+  const supabase = await createSupabaseServerClient();
+
+  // apaga o arquivo antes da linha: se a ordem fosse inversa e o storage
+  // falhasse, sobraria um arquivo orfao que ninguem mais consegue localizar
+  const { error: storageError } = await supabase.storage.from("lesson-media").remove([storagePath]);
+  if (storageError) return fail(`Nao consegui remover o arquivo: ${storageError.message}`);
+
+  const { error } = await supabase.from("media").delete().eq("id", mediaId);
+  if (error) return fail(error.message);
+  refreshAll("/admin/media");
+  return ok;
+}
+
 /* ============================== ordenacao ============================== */
 
 /**
