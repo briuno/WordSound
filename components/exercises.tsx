@@ -278,6 +278,106 @@ function Matching({ exercise, value, onChange, disabled }: ExerciseInputProps) {
   );
 }
 
+/**
+ * Classificar em categorias. Compartilha o corretor com MATCHING, mas a
+ * interacao e outra: varias palavras caem na mesma categoria, entao a coluna
+ * da direita nunca "esgota". A palavra sai do banco quando e classificada e
+ * volta quando o aluno clica nela dentro da categoria.
+ */
+function CategorySort({ exercise, value, onChange, disabled }: ExerciseInputProps) {
+  const items = ((exercise.prompt as { left?: unknown }).left as string[] | undefined) ?? [];
+  const categories = ((exercise.prompt as { right?: unknown }).right as string[] | undefined) ?? [];
+  const pairs = (value as { pairs?: [number, number][] } | null)?.pairs ?? [];
+  const [active, setActive] = React.useState<number | null>(null);
+
+  const placed = new Map(pairs.map(([i, c]) => [i, c]));
+  const pool = items.map((_, i) => i).filter((i) => !placed.has(i));
+
+  function pickItem(i: number) {
+    setActive(active === i ? null : i);
+  }
+
+  function dropInto(c: number) {
+    if (active === null) return;
+    onChange({ pairs: [...pairs.filter(([i]) => i !== active), [active, c] as [number, number]] });
+    setActive(null);
+  }
+
+  function takeBack(i: number) {
+    onChange({ pairs: pairs.filter(([j]) => j !== i) });
+    setActive(null);
+  }
+
+  const chip = (state: "idle" | "active" | "placed") =>
+    cn(
+      "rounded-xl border-2 px-3 py-2 text-sm font-semibold transition-colors",
+      state === "placed"
+        ? "border-success/60 bg-success/10 text-text"
+        : state === "active"
+          ? "border-brand bg-brand/10"
+          : "border-[var(--border)] bg-surface hover:border-brand/45",
+    );
+
+  return (
+    <div className="space-y-4">
+      <ul className="flex flex-wrap gap-2" aria-label="Palavras para classificar">
+        {pool.map((i) => (
+          <li key={i}>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => pickItem(i)}
+              aria-pressed={active === i}
+              className={chip(active === i ? "active" : "idle")}
+            >
+              {items[i]}
+            </button>
+          </li>
+        ))}
+        {pool.length === 0 ? (
+          <li className="text-sm text-text-muted">Todas as palavras foram classificadas.</li>
+        ) : null}
+      </ul>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {categories.map((category, c) => {
+          const inside = pairs.filter(([, k]) => k === c).map(([i]) => i);
+          return (
+            <div key={c} className="rounded-2xl border-2 border-[var(--border)] bg-surface-muted p-3">
+              <button
+                type="button"
+                disabled={disabled || active === null}
+                onClick={() => dropInto(c)}
+                className={cn(
+                  "w-full rounded-xl px-2 py-1.5 text-left text-sm font-bold uppercase tracking-wide",
+                  active === null ? "text-text-muted" : "bg-brand/10 text-text",
+                )}
+              >
+                {category}
+              </button>
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {inside.map((i) => (
+                  <li key={i}>
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => takeBack(i)}
+                      className={chip("placed")}
+                    >
+                      {items[i]}
+                    </button>
+                  </li>
+                ))}
+                {inside.length === 0 ? <li className="py-1 text-sm text-text-muted">vazio</li> : null}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ registry */
 
 const INPUTS: Partial<Record<ExerciseType, React.ComponentType<ExerciseInputProps>>> = {
@@ -294,6 +394,7 @@ const INPUTS: Partial<Record<ExerciseType, React.ComponentType<ExerciseInputProp
   ORDER_WORDS: OrderWords,
   ORDER_SENTENCES: OrderWords,
   MATCHING: Matching,
+  CATEGORY_SORT: CategorySort,
 };
 
 /** true quando o tipo tem UI implementada nesta entrega. */
