@@ -110,6 +110,8 @@ export interface LessonSummary {
   incorrect: number;
   answered: number;
   xpEarned: number;
+  studyMinutes: number;
+  newAchievements: { code: string; title: string }[];
 }
 
 /**
@@ -144,11 +146,19 @@ export async function completeLesson(lessonId: number): Promise<LessonSummary | 
   const incorrect = answered - correct;
   const accuracy = answered === 0 ? 0 : Math.round((correct / answered) * 100);
 
-  const alreadyDone = await supabase
+  const previous = await supabase
     .from("user_progress")
-    .select("status")
+    .select("status,started_at")
     .eq("lesson_id", lessonId)
     .maybeSingle();
+
+  // Tempo medido no servidor, de started_at ate agora. Nao aceitamos duracao
+  // vinda do cliente, que seria trivial de inflar. O teto de 120 min fica na
+  // funcao do banco, para a aba esquecida aberta nao virar tempo de estudo.
+  const startedAt = previous.data?.started_at ? new Date(previous.data.started_at) : null;
+  const studyMinutes = startedAt
+    ? Math.max(1, Math.round((Date.now() - startedAt.getTime()) / 60000))
+    : 1;
 
   await supabase.from("user_progress").upsert(
     {
@@ -162,16 +172,33 @@ export async function completeLesson(lessonId: number): Promise<LessonSummary | 
     { onConflict: "user_id,lesson_id" },
   );
 
-  // XP de conclusao so na primeira vez que a licao e fechada
-  if (alreadyDone.data?.status !== "completed") {
+  // XP e tempo de conclusao so na primeira vez que a licao e fechada
+  const firstTime = previous.data?.status !== "completed";
+  if (firstTime) {
     const { data: lesson } = await supabase.from("lessons").select("xp_reward").eq("id", lessonId).maybeSingle();
     const bonus = lesson?.xp_reward ?? (await getXpSettings()).lesson_complete;
-    await supabase.rpc("record_study_activity", { p_xp: bonus });
+    await supabase.rpc("record_study_activity", { p_xp: bonus, p_minutes: studyMinutes });
     xpEarned += bonus;
   }
 
+  // Concede tudo que ja foi merecido, nao so o que acabou de ser atingido.
+  const { data: earned } = await supabase.rpc("award_achievements");
+  const newAchievements = ((earned as { code: string; title: string }[] | null) ?? []).map((a) => ({
+    code: a.code,
+    title: a.title,
+  }));
+
   revalidatePath("/app");
-  return { accuracy, correct, incorrect, answered, xpEarned };
+  revalidatePath("/app/profile");
+  return {
+    accuracy,
+    correct,
+    incorrect,
+    answered,
+    xpEarned,
+    studyMinutes: firstTime ? studyMinutes : 0,
+    newAchievements,
+  };
 }
 
 /**

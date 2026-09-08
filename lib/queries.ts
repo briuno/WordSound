@@ -138,6 +138,36 @@ export async function getLearningPath(): Promise<LearningPath | null> {
   };
 }
 
+/**
+ * Uma unidade com suas licoes (spec 3). Reaproveita getLearningPath para nao
+ * duplicar a regra de desbloqueio: ela tem que ser identica na Home e aqui,
+ * senao as duas telas discordam sobre o que esta liberado.
+ */
+export async function getModuleDetail(moduleId: number): Promise<
+  | (LearningPath & {
+      objectives: string[];
+      totalMinutes: number;
+      accuracy: number | null;
+    })
+  | null
+> {
+  const path = await getLearningPath();
+  if (!path || path.module.id !== moduleId) return null;
+
+  const completed = path.lessons.filter((l) => l.status === "completed" && l.accuracy !== null);
+  const accuracy =
+    completed.length === 0
+      ? null
+      : Math.round(completed.reduce((sum, l) => sum + (l.accuracy ?? 0), 0) / completed.length);
+
+  return {
+    ...path,
+    objectives: path.lessons.map((l) => l.objective).filter((o): o is string => Boolean(o)),
+    totalMinutes: path.lessons.reduce((sum, l) => sum + l.estimatedMinutes, 0),
+    accuracy,
+  };
+}
+
 export interface LessonBlock {
   id: number;
   type: string;

@@ -90,12 +90,39 @@ export async function requestPasswordReset(_prev: AuthState, formData: FormData)
 
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${await siteOrigin()}/auth/callback?next=/app/profile`,
+    redirectTo: `${await siteOrigin()}/auth/callback?next=/reset-password`,
   });
   if (error) return { error: humanize(error.message) };
 
   // Resposta identica exista ou nao a conta, para nao revelar quem tem cadastro.
   return { notice: "Se existir uma conta com esse email, enviamos o link de redefinicao." };
+}
+
+/**
+ * Define a nova senha. Chamada depois que o link do email trocou o code por
+ * sessao no /auth/callback: sem sessao valida, o Supabase recusa a troca, o
+ * que impede alguem de redefinir a senha de outra pessoa.
+ */
+export async function updatePassword(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  const password = String(formData.get("password") ?? "");
+  const confirmation = String(formData.get("confirmation") ?? "");
+
+  const invalid = firstError(passwordSchema.safeParse(password));
+  if (invalid) return { error: invalid };
+  if (password !== confirmation) return { error: "As senhas nao conferem." };
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "O link expirou. Peca a redefinicao de novo." };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { error: humanize(error.message) };
+
+  redirect("/app");
 }
 
 export async function signOut() {

@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -40,7 +41,14 @@ export default async function HomePage() {
 
       <Card className="gradient-flow border-transparent text-white">
         <p className="text-sm/relaxed font-semibold opacity-90">{path.course.title}</p>
-        <h2 className="mt-1 text-xl font-extrabold">{path.module.title}</h2>
+        <Link
+          href={`/app/module/${path.module.id}`}
+          className="mt-1 inline-flex items-center gap-1.5 text-xl font-extrabold hover:underline"
+        >
+          {path.module.title}
+          <ChevronRight size={18} aria-hidden />
+          <span className="sr-only">Ver detalhes da unidade</span>
+        </Link>
         <div className="mt-5 flex items-center gap-4">
           <ProgressBar
             value={percent}

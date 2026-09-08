@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, Clock, Sparkles, Target, X } from "lucide-react";
+import { ArrowLeft, Check, Clock, Sparkles, Target, Trophy, X } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -327,9 +327,10 @@ function LessonResult({ lesson, summary }: { lesson: LessonDetail; summary: Less
         <p className="text-gradient-flow mt-6 text-5xl font-extrabold tabular-nums">{summary.accuracy}%</p>
         <p className="text-sm text-text-muted">de acerto</p>
 
-        <dl className="mt-6 grid grid-cols-2 gap-3 text-left sm:grid-cols-4">
+        <dl className="mt-6 grid grid-cols-2 gap-3 text-left sm:grid-cols-5">
           {[
             { label: "XP ganho", value: `+${summary.xpEarned}` },
+            { label: "Tempo", value: formatMinutes(summary.studyMinutes) },
             { label: "Respondidos", value: String(summary.answered) },
             { label: "Acertos", value: String(summary.correct) },
             { label: "Erros", value: String(summary.incorrect) },
@@ -340,6 +341,22 @@ function LessonResult({ lesson, summary }: { lesson: LessonDetail; summary: Less
             </div>
           ))}
         </dl>
+
+        {summary.newAchievements.length > 0 ? (
+          <div className="mt-6 rounded-xl border-2 border-brand/40 bg-brand/6 p-4 text-left">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand">
+              <Trophy size={14} aria-hidden />
+              {summary.newAchievements.length === 1 ? "Nova conquista" : "Novas conquistas"}
+            </p>
+            <ul className="space-y-1">
+              {summary.newAchievements.map((a) => (
+                <li key={a.code} className="font-semibold">
+                  {a.title}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         <Link href="/app" className={buttonClasses("primary", "lg", "mt-7 w-full")}>
           Voltar para a trilha
