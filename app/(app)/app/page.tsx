@@ -111,9 +111,41 @@ export default async function HomePage() {
         </Link>
       ) : null}
 
+      {path.units.length > 1 ? (
+        <section aria-labelledby="unidades">
+          <h2 id="unidades" className="mb-3 text-sm font-bold uppercase tracking-wide text-text-muted">
+            Unidades do curso
+          </h2>
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {path.units.map((unit) => {
+              const done = unit.total > 0 && unit.completed === unit.total;
+              return (
+                <li key={unit.id}>
+                  <Link
+                    href={`/app/module/${unit.id}`}
+                    className={`flex items-center gap-3 rounded-xl border p-3.5 transition-shadow hover:shadow-[var(--shadow-soft)] ${
+                      unit.isCurrent ? "border-brand/45 bg-brand/6" : "border-[var(--border)] bg-surface"
+                    }`}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-bold">{unit.title}</span>
+                      <span className="block text-xs text-text-muted">
+                        {unit.completed}/{unit.total} licoes
+                        {unit.isCurrent ? " · em andamento" : done ? " · concluida" : ""}
+                      </span>
+                    </span>
+                    <ChevronRight size={16} aria-hidden className="shrink-0 text-text-muted" />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+
       <section aria-labelledby="trilha">
         <h2 id="trilha" className="mb-3 text-sm font-bold uppercase tracking-wide text-text-muted">
-          Trilha de licoes
+          Trilha de {path.module.title}
         </h2>
         <LearningPath lessons={path.lessons} currentLessonId={path.currentLesson?.id ?? null} />
       </section>
