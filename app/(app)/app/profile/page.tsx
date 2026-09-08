@@ -21,7 +21,10 @@ export default async function ProfilePage() {
     .from("achievements")
     .select("code,title,description")
     .order("position");
-  const { data: earned } = await supabase.from("user_achievements").select("achievement_code");
+  const { data: earned } = await supabase
+    .from("user_achievements")
+    .select("achievement_code")
+    .eq("user_id", auth.user?.id ?? "");
   const earnedSet = new Set(earned?.map((e) => e.achievement_code) ?? []);
 
   const name = profile?.full_name ?? auth.user?.email?.split("@")[0] ?? "Aluno";

@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
   const { data: attempt } = await supabase
     .from("user_exercise_attempts")
     .select("id,is_correct")
+    .eq("user_id", user.id)
     .eq("exercise_id", body.exercise_id)
     .order("created_at", { ascending: false })
     .limit(1)

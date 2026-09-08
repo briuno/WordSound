@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { requireAdmin } from "@/lib/admin";
 import { EXERCISE_TYPES } from "@/lib/exercises/types";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
@@ -363,6 +364,58 @@ export async function deleteExercise(exerciseId: number, lessonId: number): Prom
   const { error } = await supabase.from("exercises").delete().eq("id", exerciseId);
   if (error) return fail(error.message);
   refreshAll(`/admin/lessons/${lessonId}`);
+  return ok;
+}
+
+/* ============================== usuarios ============================== */
+
+/**
+ * Promove ou rebaixa alguem.
+ *
+ * A garantia de que o sistema nunca fica sem administrador esta num trigger do
+ * banco, nao aqui: verificar e depois escrever seria uma condicao de corrida
+ * com dois admins agindo ao mesmo tempo. Esta funcao so traduz o erro.
+ */
+export async function setUserRole(userId: string, role: "admin" | "student"): Promise<ActionResult> {
+  await requireAdmin();
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("profiles").update({ role }).eq("id", userId);
+  if (error) {
+    return fail(
+      error.message.includes("ultimo administrador")
+        ? "Este e o unico administrador. Promova outra pessoa antes de rebaixar."
+        : error.message,
+    );
+  }
+  refreshAll("/admin/users");
+  return ok;
+}
+
+/**
+ * Exclui a conta e tudo que depende dela.
+ *
+ * Precisa do service_role porque auth.users nao e escrita por RLS. Excluir a
+ * propria conta pelo painel e quase sempre engano, entao fica bloqueado; o
+ * ultimo administrador e protegido pelo trigger, que impede o cascade.
+ */
+export async function deleteUser(userId: string): Promise<ActionResult> {
+  const { user } = await requireAdmin();
+  if (user.id === userId) return fail("Voce nao pode excluir a propria conta por aqui.");
+
+  const supabase = await createSupabaseServerClient();
+  const { data: target } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
+  if (!target) return fail("Conta nao encontrada.");
+
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin.auth.admin.deleteUser(userId);
+  if (error) {
+    return fail(
+      error.message.includes("ultimo administrador")
+        ? "Este e o unico administrador e nao pode ser excluido."
+        : error.message,
+    );
+  }
+  refreshAll("/admin/users");
   return ok;
 }
 

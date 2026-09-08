@@ -22,9 +22,13 @@ export default async function ProgressPage() {
   const [path, stats] = await Promise.all([getLearningPath(), getUserStats()]);
 
   // precisao geral pela primeira tentativa de cada exercicio
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const { data: attempts } = await supabase
     .from("user_exercise_attempts")
     .select("exercise_id,is_correct,attempt_number")
+    .eq("user_id", user?.id ?? "")
     .eq("attempt_number", 1);
 
   const answered = attempts?.length ?? 0;

@@ -56,10 +56,20 @@ function resolveStatus(
 
 export async function getUserStats(): Promise<UserStats> {
   const supabase = await createSupabaseServerClient();
-  const { data } = await supabase
-    .from("user_stats")
-    .select("xp_total,current_streak,best_streak,total_study_minutes,last_study_date")
-    .maybeSingle();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // O filtro por user_id e explicito de proposito. Confiar so no RLS quebra
+  // para quem e admin: a policy deixa o admin ver as linhas de todo mundo, e
+  // maybeSingle() com varias linhas devolve erro, zerando o XP na propria Home.
+  const { data } = user
+    ? await supabase
+        .from("user_stats")
+        .select("xp_total,current_streak,best_streak,total_study_minutes,last_study_date")
+        .eq("user_id", user.id)
+        .maybeSingle()
+    : { data: null };
 
   return {
     xpTotal: data?.xp_total ?? 0,
@@ -100,9 +110,16 @@ export async function getLearningPath(): Promise<LearningPath | null> {
     .eq("status", "published")
     .order("position");
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // mesmo motivo do getUserStats: sem este filtro, um admin veria o progresso
+  // de todos os alunos misturado na propria trilha
   const { data: progress } = await supabase
     .from("user_progress")
-    .select("lesson_id,status,progress_percent,accuracy");
+    .select("lesson_id,status,progress_percent,accuracy")
+    .eq("user_id", user?.id ?? "");
 
   const byLesson = new Map(progress?.map((p) => [p.lesson_id, p]) ?? []);
 

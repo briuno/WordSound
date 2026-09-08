@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 
+import { deleteUser, setUserRole } from "@/app/admin/actions";
+import { DeleteButton } from "@/components/admin-controls";
+import { RoleToggle } from "@/components/admin-user-controls";
 import { Card, EmptyState } from "@/components/ui";
+import { requireAdmin } from "@/lib/admin";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatMinutes } from "@/lib/utils";
 
@@ -12,6 +17,7 @@ function formatDate(iso: string | null): string {
 }
 
 export default async function AdminUsersPage() {
+  const { user: currentUser } = await requireAdmin();
   const supabase = await createSupabaseServerClient();
 
   // As policies de admin liberam a leitura destas tabelas; nada de service_role
@@ -21,6 +27,12 @@ export default async function AdminUsersPage() {
     supabase.from("user_progress").select("user_id,status"),
     supabase.from("user_exercise_attempts").select("user_id,is_correct,attempt_number"),
   ]);
+
+  // O email vive em auth.users, fora do alcance do RLS, entao aqui o
+  // service_role e a unica via. Serve so para identificar a pessoa na lista.
+  const adminClient = createSupabaseAdminClient();
+  const { data: authUsers } = await adminClient.auth.admin.listUsers({ perPage: 200 });
+  const emailBy = new Map((authUsers?.users ?? []).map((u) => [u.id, u.email ?? ""]));
 
   const statsBy = new Map((stats ?? []).map((s) => [s.user_id, s]));
 
@@ -43,7 +55,8 @@ export default async function AdminUsersPage() {
     return {
       id: p.id,
       name: p.full_name ?? "(sem nome)",
-      role: p.role,
+      email: emailBy.get(p.id) ?? "",
+      role: p.role as "admin" | "student",
       joinedAt: p.created_at,
       xp: statsBy.get(p.id)?.xp_total ?? 0,
       streak: statsBy.get(p.id)?.current_streak ?? 0,
@@ -55,30 +68,44 @@ export default async function AdminUsersPage() {
     };
   });
 
+  const adminCount = rows.filter((r) => r.role === "admin").length;
+
   return (
     <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-extrabold tracking-tight">Alunos</h1>
         <p className="mt-1 text-sm text-text-muted">
-          {rows.length} conta(s). A precisao considera a primeira tentativa de cada exercicio.
+          {rows.length} conta(s), {adminCount} com acesso de administrador. A precisao considera a primeira
+          tentativa de cada exercicio.
         </p>
       </header>
+
+      {adminCount === 1 ? (
+        <Card className="border-brand/40 bg-brand/6 p-4">
+          <p className="text-sm">
+            <span className="font-bold">Existe apenas um administrador.</span> Promova outra pessoa para nao
+            depender de uma unica conta. O sistema impede rebaixar ou excluir o ultimo admin.
+          </p>
+        </Card>
+      ) : null}
 
       {rows.length === 0 ? (
         <EmptyState title="Nenhuma conta ainda" />
       ) : (
         <Card className="overflow-x-auto p-0">
-          <table className="w-full min-w-[46rem] text-sm">
+          <table className="w-full min-w-[54rem] text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wide text-text-muted">
                 <th className="px-4 py-3 font-semibold">Aluno</th>
                 <th className="px-4 py-3 text-right font-semibold">XP</th>
-                <th className="px-4 py-3 text-right font-semibold">Sequencia</th>
                 <th className="px-4 py-3 text-right font-semibold">Licoes</th>
-                <th className="px-4 py-3 text-right font-semibold">Respostas</th>
                 <th className="px-4 py-3 text-right font-semibold">Precisao</th>
                 <th className="px-4 py-3 text-right font-semibold">Tempo</th>
                 <th className="px-4 py-3 text-right font-semibold">Ultimo acesso</th>
+                <th className="px-4 py-3 text-right font-semibold">Papel</th>
+                <th className="px-4 py-3 text-right font-semibold">
+                  <span className="sr-only">Acoes</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -86,22 +113,38 @@ export default async function AdminUsersPage() {
                 <tr key={row.id} className="border-b border-[var(--border)] last:border-0">
                   <td className="px-4 py-3">
                     <span className="font-semibold">{row.name}</span>
-                    {row.role === "admin" ? (
-                      <span className="ml-2 rounded-[var(--radius-pill)] bg-purple/12 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-purple">
-                        admin
+                    {row.id === currentUser.id ? (
+                      <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                        voce
                       </span>
                     ) : null}
+                    <span className="block truncate text-xs text-text-muted">{row.email}</span>
                     <span className="block text-xs text-text-muted">desde {formatDate(row.joinedAt)}</span>
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">{row.xp}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{row.streak}d</td>
                   <td className="px-4 py-3 text-right tabular-nums">{row.lessons}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{row.answered}</td>
                   <td className="px-4 py-3 text-right tabular-nums">
                     {row.accuracy === null ? "—" : `${row.accuracy}%`}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">{formatMinutes(row.minutes)}</td>
                   <td className="px-4 py-3 text-right text-text-muted">{formatDate(row.lastStudy)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <RoleToggle
+                      isAdmin={row.role === "admin"}
+                      isSelf={row.id === currentUser.id}
+                      action={setUserRole.bind(null, row.id)}
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {row.id === currentUser.id ? (
+                      <span className="text-xs text-text-muted">—</span>
+                    ) : (
+                      <DeleteButton
+                        action={deleteUser.bind(null, row.id)}
+                        confirmLabel={`a conta de ${row.name}`}
+                      />
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

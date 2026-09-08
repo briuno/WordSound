@@ -67,6 +67,7 @@ export async function submitAnswer(
   const { count } = await supabase
     .from("user_exercise_attempts")
     .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
     .eq("exercise_id", exerciseId);
   const attemptNumber = (count ?? 0) + 1;
 
@@ -131,6 +132,7 @@ export async function completeLesson(lessonId: number): Promise<LessonSummary | 
   const { data: attempts } = await supabase
     .from("user_exercise_attempts")
     .select("exercise_id,is_correct,attempt_number,xp_earned")
+    .eq("user_id", user.id)
     .eq("lesson_id", lessonId)
     .order("attempt_number");
 
@@ -149,6 +151,7 @@ export async function completeLesson(lessonId: number): Promise<LessonSummary | 
   const previous = await supabase
     .from("user_progress")
     .select("status,started_at")
+    .eq("user_id", user.id)
     .eq("lesson_id", lessonId)
     .maybeSingle();
 
@@ -223,6 +226,7 @@ export async function revealTranscript(mediaId: number): Promise<{ transcript?: 
     const { data: attempts } = await supabase
       .from("user_exercise_attempts")
       .select("exercise_id")
+      .eq("user_id", user.id)
       .in("exercise_id", boundIds);
     const answered = new Set((attempts ?? []).map((a) => a.exercise_id));
     if (boundIds.some((id) => !answered.has(id))) {
@@ -293,6 +297,7 @@ export async function startLesson(lessonId: number): Promise<void> {
   const { data: existing } = await supabase
     .from("user_progress")
     .select("status")
+    .eq("user_id", user.id)
     .eq("lesson_id", lessonId)
     .maybeSingle();
   if (existing?.status === "completed") return;
