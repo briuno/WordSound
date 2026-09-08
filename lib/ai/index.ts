@@ -1,16 +1,13 @@
 import "server-only";
 
 import { AnthropicProvider } from "./anthropic";
+import { DEFAULT_GOOGLE_MODEL, GoogleProvider } from "./google";
 import { AIProviderError, type AIProvider } from "./types";
 
 export * from "./types";
 
-/**
- * Fabrica do fornecedor de IA.
- *
- * Este e o unico ponto do sistema que sabe qual fornecedor esta em uso.
- * Para trocar, some uma implementacao de AIProvider e um case aqui.
- */
+export type ProviderId = "google" | "anthropic";
+
 /**
  * Um .env recem copiado do template tem a chave preenchida com um placeholder.
  * Sem esta checagem o app tentaria chamar a API e devolveria "credencial
@@ -23,10 +20,34 @@ function realKey(value: string | undefined): string | null {
   return key;
 }
 
-export function getAIProvider(): AIProvider {
-  const provider = (process.env.AI_PROVIDER ?? "anthropic").toLowerCase();
+function activeProvider(): ProviderId {
+  const raw = (process.env.AI_PROVIDER ?? "google").toLowerCase();
+  return raw === "anthropic" ? "anthropic" : "google";
+}
 
-  switch (provider) {
+function googleKey(): string | null {
+  // aceita os dois nomes usuais para nao obrigar a renomear o que ja existe
+  return realKey(process.env.GOOGLE_API_KEY) ?? realKey(process.env.GEMINI_API_KEY);
+}
+
+/**
+ * Fabrica do fornecedor de IA.
+ *
+ * Este e o unico ponto do sistema que sabe qual fornecedor esta em uso.
+ * Para trocar, basta AI_PROVIDER no .env. Para somar um terceiro, uma
+ * implementacao de AIProvider e um case aqui. Nada mais muda.
+ */
+export function getAIProvider(): AIProvider {
+  switch (activeProvider()) {
+    case "google": {
+      const key = googleKey();
+      if (!key) {
+        throw new AIProviderError(
+          "GOOGLE_API_KEY nao configurada. Preencha no .env para habilitar o WordSound Insight.",
+        );
+      }
+      return new GoogleProvider(key, process.env.GOOGLE_MODEL?.trim() || DEFAULT_GOOGLE_MODEL);
+    }
     case "anthropic": {
       const key = realKey(process.env.ANTHROPIC_API_KEY);
       if (!key) {
@@ -36,14 +57,12 @@ export function getAIProvider(): AIProvider {
       }
       return new AnthropicProvider(key);
     }
-    default:
-      throw new AIProviderError(`Fornecedor de IA desconhecido: ${provider}`);
   }
 }
 
 /** true quando ha credencial de verdade para o fornecedor ativo. */
 export function isAIConfigured(): boolean {
-  const provider = (process.env.AI_PROVIDER ?? "anthropic").toLowerCase();
-  if (provider === "anthropic") return realKey(process.env.ANTHROPIC_API_KEY) !== null;
-  return false;
+  return activeProvider() === "google"
+    ? googleKey() !== null
+    : realKey(process.env.ANTHROPIC_API_KEY) !== null;
 }

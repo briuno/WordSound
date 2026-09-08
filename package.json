@@ -10,10 +10,12 @@
     "test": "node --test --experimental-strip-types \"lib/**/*.test.ts\"",
     "db:migrate": "python scripts/migrate.py",
     "db:status": "python scripts/migrate.py --status",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "ai:models": "node scripts/list_google_models.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
+    "@google/genai": "^2.21.0",
     "@supabase/ssr": "^0.12.6",
     "@supabase/supabase-js": "^2.116.0",
     "clsx": "^2.1.1",
