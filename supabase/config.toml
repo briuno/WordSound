@@ -1,0 +1,6 @@
+project_id = "girfjqnbzsenucgbvojn"
+
+[functions.explain-answer]
+# A funcao e chamada servidor a servidor com a service_role; a verificacao de
+# assinatura do JWT fica ligada e o papel e conferido dentro da funcao.
+verify_jwt = true
